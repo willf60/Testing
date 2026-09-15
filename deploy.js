@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 
-import chalk from 'chalk';
-import inquirer from 'inquirer';
-import ora from 'ora';
+import { styleText } from 'node:util';
+import { checkbox, confirm, Separator } from '@inquirer/prompts';
 import { exec, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
-import toml from 'toml';
+import { parse as parseToml } from 'smol-toml';
 
 const execPromise = promisify(exec);
 
@@ -29,14 +28,14 @@ async function getCurrentBranch() {
 		const { stdout } = await execPromise('git rev-parse --abbrev-ref HEAD');
 		return stdout.trim();
 	} catch (error) {
-		console.error( chalk.yellowBright('Unable to determine current git branch. Main branch guard cannot be completed.'), error?.message || error );
+		console.error( styleText('yellowBright', 'Unable to determine current git branch. Main branch guard cannot be completed.'), error?.message || error );
 		return null;
 	}
 }
 
 function getEnvironments() {
 	const raw = fs.readFileSync('shopify.theme.toml', 'utf8');
-	const parsed = toml.parse(raw);
+	const parsed = parseToml(raw);
 	return new Map(Object.keys(parsed.environments).map(env => [parsed.environments[env]?.store?.trim(), env]));
 }
 
@@ -44,36 +43,33 @@ async function getThemes(environment, store) {
 	try {
 		const { stdout: shopifyOutput } = await execPromise(`shopify theme list --environment=${environment} --json`);
 		return JSON.parse(shopifyOutput).filter(theme => (theme?.role || '').toLowerCase() !== 'development').map(theme => ({
-			name: chalk.white.bold(`${theme.id}: ${theme.name} (${theme.role || 'unpublished'})`),
+			name: styleText(['white', 'bold'], `${theme.id}: ${theme.name} (${theme.role || 'unpublished'})`),
 			value: { environment, store, themeID: theme.id, role: theme.role, themeName: theme.name }
 		}));
 	} catch (error) {
 		const stderr = error?.stderr || '';
-		console.error(chalk.red(`✖ Error retrieving themes for ${store}:`), stderr || error?.message || error);
-		console.error(chalk.yellowBright(`Try to run "shopify theme list --store ${store} --json" to verify authentication for this store.`));
+		console.error(styleText('red', `✖ Error retrieving themes for ${store}:`), stderr || error?.message || error);
+		console.error(styleText('yellowBright', `Try to run "shopify theme list --store ${store} --json" to verify authentication for this store.`));
 		return [];
 	}
 }
 
-async function getThemeSelectionList(environments, spinnerText = 'Fetching theme list for stores listed in shopify.theme.toml...') {
+async function getThemeSelectionList(environments, progressText = 'Fetching theme list for stores listed in shopify.theme.toml...') {
 	const total = environments.size;
-	const spinner = ora(`${spinnerText} (0/${total})`).start();
 	const list = [];
 	let counter = 0;
 
-	try {
-		for (const [store, environment] of environments) {
-			const themes = await getThemes(environment, store);
-			if (themes.length > 0) {
-				list.push({
-					separator: new inquirer.Separator(chalk.yellowBright(`── ${store} ──`)),
-					themes
-				});
-			}
-			spinner.text = `${spinnerText} (${++counter}/${total})`;
+	console.log(styleText('yellowBright', `${progressText} (0/${total})`));
+
+	for (const [store, environment] of environments) {
+		const themes = await getThemes(environment, store);
+		if (themes.length > 0) {
+			list.push({
+				separator: new Separator(styleText('yellowBright', `── ${store} ──`)),
+				themes
+			});
 		}
-	} finally {
-		spinner.stop();
+		console.log(styleText('yellowBright', `${progressText} (${++counter}/${total})`));
 	}
 
 	return list;
@@ -84,26 +80,22 @@ async function deploy() {
 
 	const currentBranch = await getCurrentBranch();
 	if (currentBranch && currentBranch !== 'main') {
-		console.log( chalk.yellowBright( `⚠ You are deploying from branch ${chalk.bold(currentBranch)}, not the main branch.` ) );
+		console.log( styleText('yellowBright', `⚠ You are deploying from branch ${styleText('bold', currentBranch)}, not the main branch.` ) );
 
-		const { continueDeploy } = await inquirer.prompt([
-			{
-				type: 'confirm',
-				name: 'continueDeploy',
-				message: 'Are you sure you want to continue deploying from this branch?',
-				default: false
-			}
-		]);
+		const continueDeploy = await confirm({
+			message: 'Are you sure you want to continue deploying from this branch?',
+			default: false
+		});
 
 		if (!continueDeploy) {
-			console.log(chalk.greenBright('\nDeployment cancelled.'));
+			console.log(styleText('greenBright', '\nDeployment cancelled.'));
 			process.exit(0);
 		}
 	}
 
 	const environments = getEnvironments();
 	if (environments.size === 0) {
-		console.error(chalk.yellowBright('⚠ No stores configured. Ensure shopify.theme.toml is configured correctly.'));
+		console.error(styleText('yellowBright', '⚠ No stores configured. Ensure shopify.theme.toml is configured correctly.'));
 		return;
 	}
 	const storeGroups = await getThemeSelectionList(environments);
@@ -111,36 +103,33 @@ async function deploy() {
 	const storeGroupsUI = storeGroups.flatMap(group => [group.separator, ...group.themes]);
 
 	if (storeGroupsUI.length === 0) {
-		console.error(chalk.yellowBright('⚠ No themes found in any store. Aborting deployment.'));
+		console.error(styleText('yellowBright', '⚠ No themes found in any store. Aborting deployment.'));
 		return;
 	}
 
-	const { selectedThemes } = await inquirer.prompt([
-		{
-			type: 'checkbox',
-			name: 'selectedThemes',
-			message: 'Select themes to deploy (use spacebar to select, arrows to navigate):',
-			choices: storeGroupsUI,
-			loop: false,
-			pageSize: process.stdout.rows - 4,
-			validate(answer) {
-				return answer.length ? true : 'You must choose at least one theme.';
-			}
+	const selectedThemes = await checkbox({
+		message: 'Select themes to deploy (use spacebar to select, arrows to navigate):',
+		choices: storeGroupsUI,
+		loop: false,
+		pageSize: process.stdout.rows - 4,
+		validate(answer) {
+			return answer.length ? true : 'You must choose at least one theme.';
 		}
-	]);
+	});
 
-	console.log(chalk.greenBright('\n✔ You selected the following themes to deploy to:\n'));
+	console.log(styleText('greenBright', '\n✔ You selected the following themes to deploy to:\n'));
 
 	selectedThemes.forEach(({ environment, store, themeID, themeName, role }) => {
-		console.log( chalk.greenBright(`→ ${themeName} (${themeID}) on ${store}`) + (role ? chalk.white(` [${role}]`) : '') );
+		console.log( styleText('greenBright', `→ ${themeName} (${themeID}) on ${store}`) + (role ? styleText('white', ` [${role}]`) : '') );
 	});
 
 	console.log(); // Just for spacing
 
 	for (const { environment, store, themeID, themeName } of selectedThemes) {
 		console.log(
-			chalk.greenBright(
-				`Pushing code to ${chalk.bold(themeName)} (${chalk.bold(themeID)}) on ${chalk.bold(store)}...`
+			styleText(
+				'greenBright',
+				`Pushing code to ${styleText('bold', themeName)} (${styleText('bold', String(themeID))}) on ${styleText('bold', store)}...`
 			)
 		);
 
@@ -150,7 +139,7 @@ async function deploy() {
 			await spawnInteractive(command);
 		} catch (error) {
 			console.error(
-				chalk.red(`✖ Error deploying theme ${themeID} on store ${store}:`),
+				styleText('red', `✖ Error deploying theme ${themeID} on store ${store}:`),
 				error.message || error
 			);
 		}

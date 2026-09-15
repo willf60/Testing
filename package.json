@@ -9,9 +9,7 @@
     "check-fonts": "uv run --with fonttools --with brotli bin/check-fonts.py"
   },
   "devDependencies": {
-    "chalk": "^5.4.1",
-    "inquirer": "^12.5.2",
-    "ora": "^8.2.0",
-    "toml": "^3.0.0"
+    "@inquirer/prompts": "^8.7.2",
+    "smol-toml": "^1.8.0"
   }
 }
