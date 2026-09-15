@@ -1,0 +1,4 @@
+[environments.default]
+store = "testing-fpsbk9rq.myshopify.com"
+ignore = ["config/settings_data.json", "templates/*.json"]
+allow-live = true
