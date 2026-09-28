@@ -13,7 +13,7 @@ const themeEditorUrl = (store, themeID) => `https://${store}/admin/themes/${them
 // OSC 8: renders `label` as a clickable link in modern terminals.
 const hyperlink = (label, url) => (process.stdout.isTTY ? `\u001b]8;;${url}\u001b\\${label}\u001b]8;;\u001b\\` : label);
 
-// ── Terminal presentation helpers ───────────────────────────────────────────
+// Terminal presentation 
 const SUPPORTS_UNICODE = process.platform !== 'win32' || Boolean(process.env.WT_SESSION) || process.env.TERM_PROGRAM === 'vscode';
 const icon = (fancy, plain) => (SUPPORTS_UNICODE ? fancy : plain);
 
