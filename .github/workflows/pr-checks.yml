@@ -1,0 +1,67 @@
+# Runs on every pull request, and again whenever new commits are pushed to it.
+# Each job below shows up as its own pass/fail check on the PR page.
+name: PR checks
+
+on:
+  pull_request:
+
+# Read-only access to the repo is all these checks need.
+permissions:
+  contents: read
+
+jobs:
+  theme-check:
+    name: Shopify Theme Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # Pinned to the same major version you run locally, so results match.
+      - name: Install Shopify CLI
+        run: npm install --global @shopify/cli@4
+
+      # Fails the job if any error-level offence is found. Warnings are
+      # reported but don't fail. Needs no store login: it only reads files.
+      - name: Run theme check
+        run: shopify theme check --fail-level error --no-color
+
+  code-scan:
+    name: TODOs and dev URLs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      # Each match is printed as an "::error" annotation, which GitHub pins
+      # to the exact file and line in the PR's "Files changed" tab.
+      - name: Scan theme files
+        shell: bash
+        run: |
+          THEME_DIRS="assets blocks config layout locales sections snippets templates"
+          found=0
+
+          scan() {
+            local label="$1" pattern="$2" matches
+            matches=$(grep -rnIEs "$pattern" $THEME_DIRS || true)
+            if [ -z "$matches" ]; then
+              echo "✔ No ${label} found."
+              return
+            fi
+            while IFS=: read -r file line text; do
+              text=$(echo "$text" | sed 's/^[[:space:]]*//' | cut -c1-150)
+              echo "::error file=${file},line=${line}::${label}: ${text}"
+            done <<< "$matches"
+            echo "✖ Found $(echo "$matches" | wc -l) ${label}."
+            found=1
+          }
+
+          scan "TODO/FIXME comments" '\b(TODO|FIXME)\b'
+          scan "dev URLs" 'localhost|127\.0\.0\.1|[a-z0-9-]+\.myshopify\.com|shopifypreview\.com|preview_theme_id|ngrok'
+
+          exit $found
