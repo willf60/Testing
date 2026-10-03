@@ -115,6 +115,9 @@
   },
   "products": {
     "product": {
+      "selling_plans": {
+        "one_time_purchase": "1回限りの購入"
+      },
       "add_to_cart": "カートに追加する",
       "description": "商品説明",
       "on_sale": "セール",

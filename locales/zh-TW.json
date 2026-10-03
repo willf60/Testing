@@ -115,6 +115,9 @@
   },
   "products": {
     "product": {
+      "selling_plans": {
+        "one_time_purchase": "單次購買"
+      },
       "add_to_cart": "加入購物車",
       "description": "說明",
       "on_sale": "特價",

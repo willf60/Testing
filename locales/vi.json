@@ -115,6 +115,9 @@
   },
   "products": {
     "product": {
+      "selling_plans": {
+        "one_time_purchase": "Mua một lần"
+      },
       "add_to_cart": "Thêm vào giỏ hàng",
       "description": "Mô tả",
       "on_sale": "Giảm giá",

@@ -115,6 +115,9 @@
   },
   "products": {
     "product": {
+      "selling_plans": {
+        "one_time_purchase": "Tek seferlik satın alma"
+      },
       "add_to_cart": "Sepete ekle",
       "description": "Açıklama",
       "on_sale": "İndirim",

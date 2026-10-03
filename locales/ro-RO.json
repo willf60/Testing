@@ -116,6 +116,9 @@
   },
   "products": {
     "product": {
+      "selling_plans": {
+        "one_time_purchase": "Achiziție unică"
+      },
       "add_to_cart": "Adăugați în coș",
       "description": "Descriere",
       "on_sale": "Vânzare",

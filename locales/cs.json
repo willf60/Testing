@@ -117,6 +117,9 @@
   },
   "products": {
     "product": {
+      "selling_plans": {
+        "one_time_purchase": "Jednorázový nákup"
+      },
       "add_to_cart": "Přidat do košíku",
       "description": "Popis",
       "on_sale": "Sleva",

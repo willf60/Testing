@@ -105,7 +105,7 @@
               if variant.quantity_rule.max != null
                 echo 'products.product.quantity.maximum_of' | t: quantity: variant.quantity_rule.max | prepend: ' - '
               endif
-              # TODO: enable theme-check once `item_count_for_variant` is accepted as valid filter
+              # Theme check disabled: it does not yet recognise `item_count_for_variant` as a valid filter.
               # theme-check-disable
               assign cart_quantity = cart | item_count_for_variant: variant.id
               # theme-check-enable
