@@ -115,6 +115,9 @@
   },
   "products": {
     "product": {
+      "selling_plans": {
+        "one_time_purchase": "一次性购买"
+      },
       "add_to_cart": "添加到购物车",
       "description": "描述",
       "on_sale": "促销",

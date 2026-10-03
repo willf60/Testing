@@ -115,6 +115,9 @@
   },
   "products": {
     "product": {
+      "selling_plans": {
+        "one_time_purchase": "일회성 구매"
+      },
       "add_to_cart": "카트에 추가",
       "description": "설명",
       "on_sale": "할인",

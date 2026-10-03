@@ -116,6 +116,9 @@
   },
   "products": {
     "product": {
+      "selling_plans": {
+        "one_time_purchase": "Jednokratna kupnja"
+      },
       "add_to_cart": "Dodaj u košaricu",
       "description": "Opis",
       "on_sale": "Rasprodaja",

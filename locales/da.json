@@ -115,6 +115,9 @@
   },
   "products": {
     "product": {
+      "selling_plans": {
+        "one_time_purchase": "Engangskøb"
+      },
       "add_to_cart": "Læg i indkøbskurv",
       "description": "Beskrivelse",
       "on_sale": "Udsalg",

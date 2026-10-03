@@ -116,6 +116,9 @@
   },
   "products": {
     "product": {
+      "selling_plans": {
+        "one_time_purchase": "Compra única"
+      },
       "add_to_cart": "Adicionar ao carrinho",
       "description": "Descrição",
       "on_sale": "Promoção",

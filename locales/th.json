@@ -115,6 +115,9 @@
   },
   "products": {
     "product": {
+      "selling_plans": {
+        "one_time_purchase": "การซื้อครั้งเดียว"
+      },
       "add_to_cart": "เพิ่มลงในตะกร้าสินค้า",
       "description": "คำอธิบาย",
       "on_sale": "ลดราคา",

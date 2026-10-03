@@ -115,6 +115,9 @@
   },
   "products": {
     "product": {
+      "selling_plans": {
+        "one_time_purchase": "Eenmalige aankoop"
+      },
       "add_to_cart": "Aan winkelwagen toevoegen",
       "description": "Beschrijving",
       "on_sale": "Aanbieding",

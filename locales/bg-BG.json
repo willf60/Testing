@@ -115,6 +115,9 @@
   },
   "products": {
     "product": {
+      "selling_plans": {
+        "one_time_purchase": "Еднократна покупка"
+      },
       "add_to_cart": "Добавяне към количката",
       "description": "Описание",
       "on_sale": "Разпродажба",
