@@ -1,0 +1,60 @@
+# Gives each pull request its own preview theme on the store, kept up to date on every
+# push and deleted when the PR closes. The logic lives in .github/scripts/theme-preview.mjs.
+#
+# Needs a Theme Access password stored as the SHOPIFY_CLI_THEME_TOKEN repository secret.
+name: PR preview theme
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled, closed]
+
+permissions:
+  contents: read
+  pull-requests: write # to post and update the preview comment
+
+# One run at a time per PR, queued in order, so two quick pushes can't both
+# create a theme, and a close can't race an update.
+concurrency:
+  group: preview-theme-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    name: Preview theme
+    # Label changes only matter when the label is no-preview.
+    if: >-
+      (github.event.action != 'labeled' && github.event.action != 'unlabeled')
+      || github.event.label.name == 'no-preview'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+        with:
+          # The PR's merge commit plus its parents, so the script can list what the PR changes.
+          fetch-depth: 2
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # Installs smol-toml, used to read the ignore list from shopify.theme.toml.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Shopify CLI
+        run: npm install --global @shopify/cli@4
+
+      - name: Create, update or remove the preview theme
+        env:
+          SHOPIFY_CLI_THEME_TOKEN: ${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}
+          SHOPIFY_ENVIRONMENT: default # the [environments.*] entry in shopify.theme.toml
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_ACTION: ${{ github.event.action }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          PR_IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/scripts/theme-preview.mjs
