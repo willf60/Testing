@@ -26,15 +26,15 @@ const {
 
 // A check fails when the preview is worse than live by more than these amounts.
 //
-// Calibrated by auditing the live theme against itself (2026-10-11): JavaScript size and file counts
-// varied by under 2 KB and 1 file, total weight by up to ~50 KB, so those limits are reliable. Timing
-// varied a lot between identical runs (TBT medians by up to ~210 ms, LCP by ~370 ms, score by ~6.5),
-// so those limits only catch big slowdowns. Timing limits need both a percentage and an absolute
-// amount, so small numbers don't fail on noise.
+// Calibrated against identical themes (2026-10-11), locally and on GitHub's runners: JavaScript size
+// and file counts varied by under 6 KB and 1 file, total weight by up to ~56 KB, so those limits are
+// reliable. Timing varied a lot between identical runs (LCP medians by up to ±630 ms on GitHub, TBT by
+// ~210 ms, score by ~6.5), so those limits only catch big slowdowns; the size checks catch the rest.
+// Timing limits need both a percentage and an absolute amount, so small numbers don't fail on noise.
 const KB = 1024;
 const CHECKS = [
 	{ key: 'performance', label: 'Performance score', format: whole, fails: (live, preview) => live - preview > 10 },
-	{ key: 'lcp', label: 'Largest Contentful Paint', format: ms, fails: (live, preview) => slower(live, preview, 0.15, 500) },
+	{ key: 'lcp', label: 'Largest Contentful Paint', format: ms, fails: (live, preview) => slower(live, preview, 0.25, 1000) },
 	{ key: 'tbt', label: 'Total Blocking Time', format: ms, fails: (live, preview) => slower(live, preview, 0.5, 400) },
 	{ key: 'cls', label: 'Cumulative Layout Shift', format: (v) => v.toFixed(3), fails: (live, preview) => preview - live > 0.05 },
 	{ key: 'jsBytes', label: 'JavaScript size', format: kb, fails: (live, preview) => preview - live > 25 * KB },
