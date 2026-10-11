@@ -11,6 +11,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parse as parseToml } from 'smol-toml';
+import { upsertComment } from './pr-comment.mjs';
 
 const {
 	SHOPIFY_ENVIRONMENT = 'default',
@@ -21,14 +22,13 @@ const {
 	PR_LABELS = '[]',
 	PR_IS_FORK = 'false',
 	DIFF_BASE = 'HEAD^1',
-	GITHUB_REPOSITORY,
-	GITHUB_TOKEN,
+	GITHUB_OUTPUT,
 	DRY_RUN
 } = process.env;
 
 const dryRun = Boolean(DRY_RUN);
 const OPT_OUT_LABEL = 'no-preview';
-const COMMENT_MARKER = '<!-- theme-preview -->';
+const COMMENT_MARKER = 'theme-preview';
 const THEME_DIRS = ['assets', 'blocks', 'config', 'layout', 'locales', 'sections', 'snippets', 'templates'];
 const THEME_NAME_LIMIT = 50;
 
@@ -97,31 +97,15 @@ function changesThemeFiles(ignorePatterns) {
 	);
 }
 
-async function github(method, url, body) {
-	const response = await fetch(`https://api.github.com${url}`, {
-		method,
-		headers: {
-			Authorization: `Bearer ${GITHUB_TOKEN}`,
-			Accept: 'application/vnd.github+json',
-			'X-GitHub-Api-Version': '2022-11-28'
-		},
-		body: body ? JSON.stringify(body) : undefined
-	});
-	if (!response.ok) throw new Error(`GitHub ${method} ${url} failed: ${response.status} ${await response.text()}`);
-	return response.status === 204 ? null : response.json();
+async function postComment(body) {
+	if (dryRun) return console.log(`[dry run] would post or update the PR comment:\n${body}`);
+	await upsertComment(COMMENT_MARKER, body);
 }
 
-async function findComment() {
-	if (dryRun) return null;
-	const comments = await github('GET', `/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100`);
-	return comments.find((comment) => comment.body?.startsWith(COMMENT_MARKER)) ?? null;
-}
-
-async function upsertComment(existing, body) {
-	const fullBody = `${COMMENT_MARKER}\n${body}`;
-	if (dryRun) return console.log(`[dry run] would ${existing ? 'update' : 'post'} PR comment:\n${fullBody}`);
-	if (existing) await github('PATCH', `/repos/${GITHUB_REPOSITORY}/issues/comments/${existing.id}`, { body: fullBody });
-	else await github('POST', `/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments`, { body: fullBody });
+// Hands the theme IDs to later jobs in the workflow (the Lighthouse job reads them).
+function setJobOutputs(outputs) {
+	if (!GITHUB_OUTPUT) return;
+	fs.appendFileSync(GITHUB_OUTPUT, Object.entries(outputs).map(([k, v]) => `${k}=${v}\n`).join(''));
 }
 
 function previewComment(theme, ignorePatterns) {
@@ -186,7 +170,7 @@ async function main() {
 		if (!existing) return console.log(`No preview needed: ${reason}.`);
 		assertNotLive(existing);
 		mutate(`delete preview theme ${existing.id}`, ['delete', `--theme=${existing.id}`, '--force'], null, { json: false });
-		await upsertComment(await findComment(), `### Theme preview removed\n\nThe preview theme \`${existing.name}\` was deleted because ${reason}.`);
+		await postComment(`### Theme preview removed\n\nThe preview theme \`${existing.name}\` was deleted because ${reason}.`);
 		return;
 	}
 
@@ -224,7 +208,8 @@ async function main() {
 	}
 
 	if (pushed.theme.warning) console.log(`::warning::${pushed.theme.warning}`);
-	await upsertComment(await findComment(), previewComment(pushed.theme, ignorePatterns));
+	await postComment(previewComment(pushed.theme, ignorePatterns));
+	setJobOutputs({ theme_id: themeId, live_theme_id: themes.find((t) => t.role === 'live')?.id ?? '', store: pushed.theme.shop ?? '' });
 	console.log(`Preview: ${pushed.theme.preview_url}`);
 }
 

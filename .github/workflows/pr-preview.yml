@@ -1,7 +1,10 @@
 # Gives each pull request its own preview theme on the store, kept up to date on every
-# push and deleted when the PR closes. The logic lives in .github/scripts/theme-preview.mjs.
+# push and deleted when the PR closes, then runs Lighthouse to compare it with the live theme.
+# The logic lives in .github/scripts/theme-preview.mjs and .github/scripts/lighthouse-compare.mjs.
 #
-# Needs a Theme Access password stored as the SHOPIFY_CLI_THEME_TOKEN repository secret.
+# Secrets:
+#   SHOPIFY_CLI_THEME_TOKEN      Theme Access password (required)
+#   SHOPIFY_STOREFRONT_PASSWORD  storefront password, only for password-protected stores
 name: PR preview theme
 
 on:
@@ -26,6 +29,11 @@ jobs:
       (github.event.action != 'labeled' && github.event.action != 'unlabeled')
       || github.event.label.name == 'no-preview'
     runs-on: ubuntu-latest
+    # Empty when no preview was created or updated, which skips the Lighthouse job.
+    outputs:
+      theme_id: ${{ steps.preview.outputs.theme_id }}
+      live_theme_id: ${{ steps.preview.outputs.live_theme_id }}
+      store: ${{ steps.preview.outputs.store }}
     steps:
       - name: Check out code
         uses: actions/checkout@v7
@@ -47,6 +55,7 @@ jobs:
         run: npm install --global @shopify/cli@4
 
       - name: Create, update or remove the preview theme
+        id: preview
         env:
           SHOPIFY_CLI_THEME_TOKEN: ${{ secrets.SHOPIFY_CLI_THEME_TOKEN }}
           SHOPIFY_ENVIRONMENT: default # the [environments.*] entry in shopify.theme.toml
@@ -58,3 +67,60 @@ jobs:
           PR_IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
           GITHUB_TOKEN: ${{ github.token }}
         run: node .github/scripts/theme-preview.mjs
+
+  lighthouse:
+    name: Lighthouse
+    needs: preview
+    if: needs.preview.outputs.theme_id != ''
+    runs-on: ubuntu-latest
+    env:
+      OUTPUT_DIR: lighthouse-results
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # Installed here rather than in package.json, so local installs stay small.
+      # Pinned, because a new Lighthouse version can shift scores on its own.
+      - name: Install Lighthouse and Puppeteer
+        run: npm install --no-save --no-audit --no-fund lighthouse@13.5.0 puppeteer@25.13.0
+
+      - name: Run Lighthouse on live and preview
+        id: audit
+        env:
+          STORE: ${{ needs.preview.outputs.store }}
+          PREVIEW_THEME_ID: ${{ needs.preview.outputs.theme_id }}
+          LIVE_THEME_ID: ${{ needs.preview.outputs.live_theme_id }}
+          SHOPIFY_STOREFRONT_PASSWORD: ${{ secrets.SHOPIFY_STOREFRONT_PASSWORD }}
+          PRODUCT_HANDLE: ${{ vars.LIGHTHOUSE_PRODUCT_HANDLE }} # optional repository variable to pin a product
+        run: node .github/scripts/lighthouse-compare.mjs
+
+      - name: Upload reports
+        id: upload
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lighthouse-reports
+          path: ${{ env.OUTPUT_DIR }}/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Post results on the PR
+        if: always() && hashFiles('lighthouse-results/summary.md') != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: node .github/scripts/pr-comment.mjs lighthouse ${{ env.OUTPUT_DIR }}/summary.md
+
+      # The audit step only crashes on real errors; a budget failure is reported here,
+      # after the reports and comment are in place.
+      - name: Fail if over budget
+        if: steps.audit.outputs.result == 'fail'
+        run: |
+          echo "::error::The preview is slower or heavier than live beyond the budget. See the Lighthouse comment on the PR."
+          exit 1
