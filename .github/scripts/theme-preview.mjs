@@ -150,6 +150,21 @@ function reasonForNoPreview(ignorePatterns) {
 	return null;
 }
 
+// `theme duplicate` returns while Shopify is still copying files in the background
+// (`processing: true`). Pushing before that finishes lets the copy overwrite the PR's changes.
+async function waitUntilReady(themeId, { timeoutMs = 5 * 60_000, intervalMs = 5_000 } = {}) {
+	if (dryRun) return;
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
+		const theme = shopifyJson(['list']).find((t) => t.id === themeId);
+		if (!theme) throw new Error(`Preview theme ${themeId} disappeared while waiting for it to finish copying.`);
+		if (!theme.processing) return;
+		if (Date.now() > deadline) throw new Error(`Preview theme ${themeId} was still copying after ${timeoutMs / 60_000} minutes.`);
+		console.log(`Theme ${themeId} is still copying, waiting ${intervalMs / 1000}s…`);
+		await sleep(intervalMs);
+	}
+}
+
 function assertNotLive(theme) {
 	// Belt and braces: nothing in this script should ever touch the live theme.
 	if (theme.role === 'live') throw new Error(`Refusing to modify the live theme (${theme.id} "${theme.name}")`);
@@ -191,7 +206,9 @@ async function main() {
 		themeId = duplicated.theme.id;
 	}
 
-	// A freshly copied theme can take a moment to become writable, so retry the push briefly.
+	await waitUntilReady(themeId);
+
+	// Retry briefly in case the theme isn't writable the moment copying finishes.
 	let pushed;
 	for (let attempt = 1; ; attempt++) {
 		try {
