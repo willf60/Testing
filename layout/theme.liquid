@@ -32,6 +32,8 @@
     <script src="{{ 'constants.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'pubsub.js' | asset_url }}" defer="defer"></script>
     <script src="{{ 'global.js' | asset_url }}" defer="defer"></script>
+    {% comment %} TEMPORARY: deliberately heavy script to test that the Lighthouse check fails. Remove after testing. {% endcomment %}
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js" defer="defer"></script>
     {{ content_for_header }}
 
     {%- liquid
