@@ -2,7 +2,7 @@
 # push and deleted when the PR closes, then runs Lighthouse to compare it with the live theme.
 # The logic lives in .github/scripts/theme-preview.mjs and .github/scripts/lighthouse-compare.mjs.
 #
-# Secrets:
+# Secrets.
 #   SHOPIFY_CLI_THEME_TOKEN      Theme Access password (required)
 #   SHOPIFY_STOREFRONT_PASSWORD  storefront password, only for password-protected stores
 name: PR preview theme
@@ -13,13 +13,15 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write # to post and update the preview comment
+  pull-requests: write # to post and update the PR comments
 
-# One run at a time per PR, queued in order, so two quick pushes can't both
-# create a theme, and a close can't race an update.
+# One run at a time per PR (in order) so two quick pushes can't both create a theme and Lighthouse
+# never measures a preview while the next push is updating it. `queue: max` keeps every waiting run,
+# by default each new run would cancel the one waiting so an unrelated label change could cancel a
+# push's checks or the clean-up after a merge.
 concurrency:
   group: preview-theme-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  queue: max
 
 jobs:
   preview:
@@ -29,6 +31,7 @@ jobs:
       (github.event.action != 'labeled' && github.event.action != 'unlabeled')
       || github.event.label.name == 'no-preview'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Empty when no preview was created or updated, which skips the Lighthouse job.
     outputs:
       theme_id: ${{ steps.preview.outputs.theme_id }}
@@ -38,7 +41,7 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v7
         with:
-          # The PR's merge commit plus its parents, so the script can list what the PR changes.
+          # The PR's merge commit plus its parents so the script can list what the PR changes.
           fetch-depth: 2
 
       - name: Set up Node
@@ -47,12 +50,9 @@ jobs:
           node-version: 24
           cache: npm
 
-      # Installs smol-toml, used to read the ignore list from shopify.theme.toml.
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Shopify CLI
-        run: npm install --global @shopify/cli@4
+      # npm ci installs smol-toml, used to read the ignore list from shopify.theme.toml.
+      - name: Install dependencies and Shopify CLI
+        run: npm ci && npm install --global @shopify/cli@4
 
       - name: Create, update or remove the preview theme
         id: preview
@@ -73,8 +73,7 @@ jobs:
     needs: preview
     if: needs.preview.outputs.theme_id != ''
     runs-on: ubuntu-latest
-    env:
-      OUTPUT_DIR: lighthouse-results
+    timeout-minutes: 20
     steps:
       - name: Check out code
         uses: actions/checkout@v7
@@ -84,28 +83,33 @@ jobs:
         with:
           node-version: 24
 
-      # Installed here rather than in package.json, so local installs stay small.
-      # Pinned, because a new Lighthouse version can shift scores on its own.
+      # Installed here rather than in package.json so local installs stay small.
+      # Pinned because a new Lighthouse version can shift scores on its own.
       - name: Install Lighthouse and Puppeteer
+        env:
+          # `headless: true` runs full Chrome so the separate headless-shell build is never used.
+          PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD: 'true'
         run: npm install --no-save --no-audit --no-fund lighthouse@13.5.0 puppeteer@25.13.0
 
+      # Writes lighthouse-results/ then fails if the preview is over budget or the comparison couldn't finish.
       - name: Run Lighthouse on live and preview
-        id: audit
         env:
           STORE: ${{ needs.preview.outputs.store }}
           PREVIEW_THEME_ID: ${{ needs.preview.outputs.theme_id }}
           LIVE_THEME_ID: ${{ needs.preview.outputs.live_theme_id }}
           SHOPIFY_STOREFRONT_PASSWORD: ${{ secrets.SHOPIFY_STOREFRONT_PASSWORD }}
           PRODUCT_HANDLE: ${{ vars.LIGHTHOUSE_PRODUCT_HANDLE }} # optional repository variable to pin a product
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node .github/scripts/lighthouse-compare.mjs
 
+      # This step and the next run even when the one above fails so the reports and comment are always there.
       - name: Upload reports
         id: upload
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: lighthouse-reports
-          path: ${{ env.OUTPUT_DIR }}/
+          path: lighthouse-results/
           retention-days: 14
           if-no-files-found: ignore
 
@@ -115,12 +119,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
-        run: node .github/scripts/pr-comment.mjs lighthouse ${{ env.OUTPUT_DIR }}/summary.md
-
-      # The audit step only crashes on real errors; a budget failure is reported here,
-      # after the reports and comment are in place.
-      - name: Fail if over budget
-        if: steps.audit.outputs.result == 'fail'
         run: |
-          echo "::error::The preview is slower or heavier than live beyond the budget. See the Lighthouse comment on the PR."
-          exit 1
+          [ -z "$ARTIFACT_URL" ] || printf '\n\n📄 [Download the full reports](%s)' "$ARTIFACT_URL" >> lighthouse-results/summary.md
+          node .github/scripts/github.mjs lighthouse lighthouse-results/summary.md
