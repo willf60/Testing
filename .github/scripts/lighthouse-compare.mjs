@@ -260,3 +260,5 @@ run(async () => {
 	if (failed) throw new Error('The preview is slower or heavier than live beyond the budget. See the Lighthouse comment on the PR.');
 	console.log('Preview is within budget.');
 });
+
+// a change
