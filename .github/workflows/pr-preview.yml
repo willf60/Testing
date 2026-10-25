@@ -43,6 +43,7 @@ jobs:
         with:
           # The PR's merge commit plus its parents so the script can list what the PR changes.
           fetch-depth: 2
+          persist-credentials: false # don't leave the GitHub token in git config, where other steps could read it
 
       - name: Set up Node
         uses: actions/setup-node@v7
@@ -77,6 +78,8 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false # don't leave the GitHub token in git config, where other steps could read it
 
       - name: Set up Node
         uses: actions/setup-node@v7
